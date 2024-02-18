@@ -4,12 +4,22 @@
 # Installation
 Qtransformer works on Linux, Windows and macOS. It requires Python 3.7+, CUDA 10.2+ and PyTorch 1.8+.
 
-**Step 1** Create a conda environment and activate it.
+**Step 1.** Create a conda environment and activate it.
 ```bash
 conda create --name openmmlab python=3.8 -y
 conda activate openmmlab
 ```
 
+**Step 2.**  Install PyTorch following official instructions, e.g. 
+On GPU platforms:
+```bash
+conda install pytorch torchvision -c pytorch
+```
+On CPU platforms:
+```bash
+conda install pytorch torchvision cpuonly -c pytorch
+```
+**Step 3.**  Install qtransformer developed by mmpretrain
 ```bash
 git clone https://github.com/itachixc/qtransformer.git
 cd qtransformer
