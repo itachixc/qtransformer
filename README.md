@@ -17,3 +17,4 @@ python demo/image_demo.py demo/demo.JPEG resnet18_8xb32_in1k --device cpu
 
 ```bash
 python tools/trains.py qtransformer_configs/vit_config_cifar10.py
+```
