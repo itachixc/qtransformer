@@ -1,5 +1,5 @@
 # Qtransformer
- quantum transformer
+ Quantum vision transformer. 
 
 # Installation
 Qtransformer works on Linux, Windows and macOS. It requires Python 3.7+, CUDA 10.2+ and PyTorch 1.8+.
