@@ -2,7 +2,7 @@
  Quantum vision transformer. 
 
  <div align="center">
-<img src="[https://github.com/open-mmlab/mmdetection/assets/17425982/6c29886f-ae7a-4a55-8be4-352ee85b7d3e](https://github.com/itachixc/qtransformer/blob/main/docs/images/qvit.png)"/>
+<img src="https://github.com/itachixc/qtransformer/blob/main/docs/images/qvit.png"/>
 </div>
 
 # Installation
