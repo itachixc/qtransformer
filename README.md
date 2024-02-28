@@ -1,5 +1,5 @@
-# Qtransformer
- Quantum vision transformer. 
+# Quantum Vision Transformer
+ Quantum vision transformer is a quantum-classical hybrid model that accelerates the vision transformer with quantum computing. 
 
  <div align="center">
 <img src="https://github.com/itachixc/qtransformer/blob/main/docs/images/qvit.png"/>
