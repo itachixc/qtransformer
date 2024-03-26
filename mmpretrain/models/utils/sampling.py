@@ -236,10 +236,10 @@ class LinearFunctionSampling(torch.autograd.Function):
         # 对梯度进行一些后处理
         sampling_engine=SamplingBlock(sampling_error)
         grad_input = torch.matmul(grad_output,weight)
-        grad_weight = torch.matmul(torch.transpose(grad_output, grad_output.dim()-2,grad_output.dim()-1),input)
+        grad_weight = torch.matmul(torch.transpose(grad_output, grad_output.dim()-2,grad_output.dim()-1),input).sum(0) #reduce batch
         grad_bias = None
         if bias is not None:
-            grad_bias = sampling_engine(grad_output.sum(grad_output.dim()-2))
+            grad_bias = sampling_engine(grad_output.sum([axis for axis in range(grad_output.dim()-1)])) #reduce batch
         # add sampling process
         grad_weight_samping=sampling_engine(grad_weight)
         if compute_success_prob_block:
@@ -266,8 +266,6 @@ class LinearFunctionSampling(torch.autograd.Function):
                 sqrt_p=(g3/f1/g2).numpy()
                 with open(filename, 'a') as f:
                     f.write(f'{y_dim} {sqrt_p}\n') 
-            
-        
         return grad_input, grad_weight_samping, grad_bias,None
 
 
@@ -359,14 +357,12 @@ class MultiheadAttentionSampling(BaseModule):
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads,
                                   self.head_dims).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
-
         attn_drop = self.attn_drop if self.training else 0.
         x = self.scaled_dot_product_attention(q, k, v, dropout_p=attn_drop)
         x = x.transpose(1, 2).reshape(B, N, self.embed_dims)
 
         x = self.proj(x)
         x = self.out_drop(self.gamma1(self.proj_drop(x)))
-
         if self.v_shortcut:
             x = v.squeeze(1) + x
         return x
