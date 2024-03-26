@@ -123,6 +123,7 @@ class SamplingBlock(nn.Module):
         super(SamplingBlock, self).__init__()
         self.sampling_error=sampling_error
     def forward(self,x):
+        chebyshev_dec_test(x,400)
         return SamplingBlockAutoGrad.apply(x,self.sampling_error)
         
 
@@ -189,7 +190,6 @@ class SamplingBlockAutoGrad(torch.autograd.Function):
                 return x-x, None
         else: 
             return x, None
-
 
 class LinearSampling(torch.nn.Linear):
 
@@ -269,11 +269,6 @@ class LinearFunctionSampling(torch.autograd.Function):
             
         
         return grad_input, grad_weight_samping, grad_bias,None
-
-
-
-
-
 
 
 class MultiheadAttentionSampling(BaseModule):
@@ -417,3 +412,34 @@ class PESamplingAutoGrad(torch.autograd.Function):
                 return grad_output-grad_output,grad_output-grad_output, None
         else: 
             return grad_output,grad_output, None
+
+
+class ChebyshevDecomposition(nn.Module):
+    def __init__(self,order):
+        super(ChebyshevDecomposition, self).__init__()
+        self.order=order
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+
+        return x
+
+
+def chebyshev_dec_test(y,decomposition_order):
+    m = len(y)
+    x = np.cos(np.pi * (np.arange(m) + 0.5) / m)
+    # 计算切比雪夫系数
+    coefficients = np.zeros(decomposition_order)
+    for n in range(decomposition_order):
+        Tn = np.cos(n * np.arccos(x))  # 切比雪夫多项式的值
+        coefficients[n] = np.dot(y, Tn) * 2 / m
+    coefficients[0] /= 2
+    z=np.zeros(x.shape[0])
+    for n,coef in enumerate(coefficients):
+        z=z+coef*np.cos(n * np.arccos(x))
+
+    plt.plot(x,y,label='func')
+    plt.scatter(x,y)
+    plt.plot(x,z,label="cheby")
+    plt.scatter(x,z)
+    plt.legend(loc=1)
+    plt.show()
+    return z
