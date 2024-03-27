@@ -631,6 +631,7 @@ class VisionTransformerSampling(BaseBackbone):
 
     def forward(self, x):
         B = x.shape[0]
+        # print(x.shape)
         x, patch_resolution = self.patch_embed(x)
         
 
@@ -638,7 +639,7 @@ class VisionTransformerSampling(BaseBackbone):
             # stole cls_tokens impl from Phil Wang, thanks
             cls_token = self.cls_token.expand(B, -1, -1)
             x = torch.cat((cls_token, x), dim=1)
-        x=x+PESampling(resize_pos_embed(
+        x=PESampling(resize_pos_embed(
             self.pos_embed,
             self.patch_resolution,
             patch_resolution,

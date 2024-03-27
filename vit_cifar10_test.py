@@ -7,6 +7,9 @@ from mmpretrain import get_model
 from mmengine.config import Config
 from mmpretrain import list_models
 from mmpretrain import ImageClassificationInferencer
+import torchvision
+import torchvision.transforms as transforms
+from torchvision.transforms import InterpolationMode
 
 def inference_test():
     print(torch.__version__, torch.cuda.is_available())
@@ -51,14 +54,51 @@ def inference_test_2():
     print(mmpretrain.__version__)
     print(get_compiling_cuda_version())
     print(get_compiler_version())
+    batch_size_=4
+
+    transform = transforms.Compose(
+    [transforms.ToTensor(),
+     transforms.Resize((384,384),interpolation=InterpolationMode.BICUBIC),
+    #  transforms.Normalize(mean=(125.307, 122.961, 113.8575), std=(51.5865, 50.847, 51.255))
+     ])
+
+    # 加载训练集
+    trainset = torchvision.datasets.CIFAR10(root='./data/cifar10', train=True,
+                                            download=True, transform=transform)
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size_,
+                                            shuffle=True, num_workers=2)
+    dataiter = iter(trainloader)
+    classes = ('plane', 'car', 'bird', 'cat',
+           'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+    images, labels = next(dataiter)
+    print(' '.join(f'{classes[labels[j]]:5s}' for j in range(batch_size_)))
+
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    config="qtransformer_configs/vit_config_cifar10_bs64_p16_384_eps1e-4.py"
-    model=get_model(config,pretrained=False)
-    print(model)
-    image=torch.rand(1,3,64,64)
-    output=model(image)
-    print(output)
+    config="vit_config_cifar10_bs64_p16_384_eps1e-3.py"
+
+    # image=images.numpy()[0,:,:,:]
+    # inferencer = ImageClassificationInferencer(model=config, device=device)
+    # print(inferencer.model)
+    # result = inferencer(image)[0]
+    # print(result['pred_class'])
+
+    data_preprocessor = dict(
+    num_classes=10,
+    # RGB format normalization parameters
+    mean=[125.307, 122.961, 113.8575],
+    std=[51.5865, 50.847, 51.255],
+    # loaded images are already RGB format
+    to_rgb=False)
+    model=get_model(config,pretrained=True)
+    # print(model)
+    # # image=torch.rand(1,3,64,64)
+    # output=model.predict(images)
+    output=model(images)
+    label=torch.max(output,1)[1]
+    cls=[classes[label[i]] for i in range(label.shape[0])]
+    # print(output)
+    print(cls)
 
 def train_test():
 

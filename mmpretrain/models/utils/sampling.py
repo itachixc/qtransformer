@@ -38,8 +38,10 @@ compute_success_prob=False
 compute_success_prob_block=False
 compute_success_a_qdac=False
 r_size=640
-dataset='oxford_iii_pets'
-file_pre='prob_results_0123'
+dataset='cifar10'
+file_pre='test_cheby_0326'
+test_cheby=True
+label1=0
 
 def scaled_dot_product_attention_pyimpl(query,
                                         key,
@@ -123,7 +125,11 @@ class SamplingBlock(nn.Module):
         super(SamplingBlock, self).__init__()
         self.sampling_error=sampling_error
     def forward(self,x):
-        chebyshev_dec_test(x,400)
+        # chebyshev_dec_test(x,400)
+        if test_cheby:
+            global label1
+            torch.save(x,f'{file_pre}/{dataset}/cheby_shev_{label1}.pt')
+            label1+=1
         return SamplingBlockAutoGrad.apply(x,self.sampling_error)
         
 
@@ -410,32 +416,33 @@ class PESamplingAutoGrad(torch.autograd.Function):
             return grad_output,grad_output, None
 
 
-class ChebyshevDecomposition(nn.Module):
+class ChebyshevReconstruction(nn.Module):
     def __init__(self,order):
-        super(ChebyshevDecomposition, self).__init__()
+        super(ChebyshevReconstruction, self).__init__()
         self.order=order
+    # x:[batch_size,token_size,length]
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-
+        x0=
         return x
 
 
-def chebyshev_dec_test(y,decomposition_order):
-    m = len(y)
-    x = np.cos(np.pi * (np.arange(m) + 0.5) / m)
-    # 计算切比雪夫系数
-    coefficients = np.zeros(decomposition_order)
-    for n in range(decomposition_order):
-        Tn = np.cos(n * np.arccos(x))  # 切比雪夫多项式的值
-        coefficients[n] = np.dot(y, Tn) * 2 / m
-    coefficients[0] /= 2
-    z=np.zeros(x.shape[0])
-    for n,coef in enumerate(coefficients):
-        z=z+coef*np.cos(n * np.arccos(x))
+# def chebyshev_dec_test(y,decomposition_order):
+#     m = len(y)
+#     x = np.cos(np.pi * (np.arange(m) + 0.5) / m)
+#     # 计算切比雪夫系数
+#     coefficients = np.zeros(decomposition_order)
+#     for n in range(decomposition_order):
+#         Tn = np.cos(n * np.arccos(x))  # 切比雪夫多项式的值
+#         coefficients[n] = np.dot(y, Tn) * 2 / m
+#     coefficients[0] /= 2
+#     z=np.zeros(x.shape[0])
+#     for n,coef in enumerate(coefficients):
+#         z=z+coef*np.cos(n * np.arccos(x))
 
-    plt.plot(x,y,label='func')
-    plt.scatter(x,y)
-    plt.plot(x,z,label="cheby")
-    plt.scatter(x,z)
-    plt.legend(loc=1)
-    plt.show()
-    return z
+#     plt.plot(x,y,label='func')
+#     plt.scatter(x,y)
+#     plt.plot(x,z,label="cheby")
+#     plt.scatter(x,z)
+#     plt.legend(loc=1)
+#     plt.show()
+#     return z

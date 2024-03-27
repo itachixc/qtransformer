@@ -61,6 +61,8 @@ test_pipeline = [
     dict(type='PackInputs'),
 ]
 
+val_pipeline=test_pipeline
+
 
 train_dataloader = dict(
     batch_size=64,
