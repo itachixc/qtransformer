@@ -57,6 +57,8 @@ class TransformerEncoderLayer(BaseModule):
                  attn_drop_rate=0.,
                  drop_path_rate=0.,
                  sampling_error=0.,
+                 sampling_mode=0,
+                 sampling_order=100,
                  num_fcs=2,
                  qkv_bias=True,
                  ffn_type='origin',
@@ -69,7 +71,7 @@ class TransformerEncoderLayer(BaseModule):
 
         self.ln1 = build_norm_layer(norm_cfg, self.embed_dims)
 
-        self.sampling=SamplingBlock(sampling_error)
+        self.sampling=SamplingBlock(sampling_error,sampling_mode,sampling_order)
 
         if sampling_error==0:
             self.attn = MultiheadAttention(
@@ -87,6 +89,8 @@ class TransformerEncoderLayer(BaseModule):
                 attn_drop=attn_drop_rate,
                 proj_drop=drop_rate,
                 sampling_error=sampling_error,
+                sampling_mode=sampling_mode,
+                sampling_order=sampling_order,
                 dropout_layer=dict(type='DropPath', drop_prob=drop_path_rate),
                 qkv_bias=qkv_bias,
                 layer_scale_init_value=layer_scale_init_value)
@@ -191,6 +195,8 @@ class FFNSampling(BaseModule):
                  act_cfg=dict(type='ReLU', inplace=True),
                  ffn_drop=0.,
                  sampling_error=0.,
+                 sampling_mode=0,
+                 sampling_order=100,
                  dropout_layer=None,
                  add_identity=True,
                  init_cfg=None,
@@ -201,7 +207,7 @@ class FFNSampling(BaseModule):
         self.embed_dims = embed_dims
         self.feedforward_channels = feedforward_channels
         self.num_fcs = num_fcs
-        self.sampling=SamplingBlock(sampling_error)
+        self.sampling=SamplingBlock(sampling_error,sampling_mode,sampling_order)
 
         layers = []
         in_channels = embed_dims
@@ -422,6 +428,8 @@ class VisionTransformerSampling(BaseBackbone):
                  drop_rate=0.,
                  drop_path_rate=0.,
                  sampling_error=0.,
+                 sampling_mode=0,
+                 sampling_order=100,
                  qkv_bias=True,
                  norm_cfg=dict(type='LN', eps=1e-6),
                  final_norm=True,
@@ -454,6 +462,8 @@ class VisionTransformerSampling(BaseBackbone):
         self.num_layers = self.arch_settings['num_layers']
         self.img_size = to_2tuple(img_size)
         self.sampling_error=sampling_error
+        self.sampling_mode=sampling_mode
+        self.sampling_order=sampling_order
 
         # Set patch embedding
         _patch_cfg = dict(
@@ -524,6 +534,8 @@ class VisionTransformerSampling(BaseBackbone):
                 drop_rate=drop_rate,
                 drop_path_rate=dpr[i],
                 sampling_error=sampling_error,
+                sampling_mode=sampling_mode,
+                sampling_order=sampling_order,
                 qkv_bias=qkv_bias,
                 norm_cfg=norm_cfg)
             _layer_cfg.update(layer_cfgs[i])
@@ -644,7 +656,7 @@ class VisionTransformerSampling(BaseBackbone):
             self.patch_resolution,
             patch_resolution,
             mode=self.interpolate_mode,
-            num_extra_tokens=self.num_extra_tokens),self.sampling_error)(x)
+            num_extra_tokens=self.num_extra_tokens),self.sampling_error,self.sampling_mode,self.sampling_order)(x)
         # x = x + resize_pos_embed(
         #     self.pos_embed,
         #     self.patch_resolution,

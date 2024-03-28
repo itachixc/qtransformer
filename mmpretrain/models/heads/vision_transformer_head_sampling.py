@@ -33,6 +33,8 @@ class VisionTransformerClsHeadSampling(ClsHead):
                  num_classes: int,
                  in_channels: int,
                  sampling_error: float,
+                 sampling_mode:int,
+                 sampling_order:int,
                  hidden_dim: Optional[int] = None,
                  act_cfg: dict = dict(type='Tanh'),
                  init_cfg: dict = dict(type='Constant', layer='Linear', val=0),
@@ -44,7 +46,7 @@ class VisionTransformerClsHeadSampling(ClsHead):
         self.hidden_dim = hidden_dim
         self.act_cfg = act_cfg
 
-        self.sampling=SamplingBlock(sampling_error)
+        self.sampling=SamplingBlock(sampling_error,sampling_mode,sampling_order)
 
         if self.num_classes <= 0:
             raise ValueError(

@@ -40,7 +40,7 @@ compute_success_a_qdac=False
 r_size=640
 dataset='cifar10'
 file_pre='test_cheby_0326'
-test_cheby=True
+test_cheby=False
 label1=0
 
 def scaled_dot_product_attention_pyimpl(query,
@@ -119,18 +119,38 @@ class NewEmptyTensorOp(torch.autograd.Function):
     def backward(ctx, grad: torch.Tensor) -> tuple:
         shape = ctx.shape
         return NewEmptyTensorOp.apply(grad, shape), None
-
+# Sampling process: l_infinity tomography or chebyshev decomposition
 class SamplingBlock(nn.Module):
-    def __init__(self,sampling_error=0.):
+    def __init__(self,sampling_error=0.,sampling_mode=1,sampling_order=100):
         super(SamplingBlock, self).__init__()
+        self.sampling_mode=sampling_mode
         self.sampling_error=sampling_error
+        self.sampling_order=sampling_order
     def forward(self,x):
         # chebyshev_dec_test(x,400)
         if test_cheby:
             global label1
             torch.save(x,f'{file_pre}/{dataset}/cheby_shev_{label1}.pt')
             label1+=1
-        return SamplingBlockAutoGrad.apply(x,self.sampling_error)
+        if self.sampling_mode==0:
+            # print('mode 0')
+            return SamplingBlockAutoGrad.apply(x,self.sampling_error)
+        else:
+            # print('mode 1')
+            x_max=torch.max(torch.abs(x))
+            x=x.transpose(-1,-2)/x_max
+            coor = torch.cos(torch.pi * (torch.arange(x.shape[-1]).float() + 0.5) / x.shape[-1])
+            # chebyshev polynomial
+            cheby_poly=torch.cos(torch.outer(torch.arange(self.sampling_order) , torch.acos(coor))).to(x.device)
+            # coefficients
+            coefficients=torch.matmul(x,cheby_poly.T)*2/x.shape[-1]
+            coefficients[...,0]=coefficients[...,0]/2
+            # restructed y
+            restructed_x=torch.matmul(coefficients,cheby_poly)
+            # print(torch.norm(restructed_x-x))
+            restructed_x=restructed_x.transpose(-1,-2)*x_max
+            return restructed_x
+
         
 
 class SamplingBlockAutoGrad(torch.autograd.Function):
@@ -199,20 +219,20 @@ class SamplingBlockAutoGrad(torch.autograd.Function):
 
 class LinearSampling(torch.nn.Linear):
 
-    def __init__(self,in_features, out_features, bias=True,sampling_error=0.):
+    def __init__(self,in_features, out_features, bias=True,sampling_error=0.,sampling_mode=0,sampling_order=100):
         super(LinearSampling, self).__init__(in_features, out_features, bias)
         self.sampling_error=sampling_error
-
+        self.sampling_mode=sampling_mode
+        self.sampling_order=sampling_order
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-
-        return LinearFunctionSampling.apply(x,self.weight,self.bias,self.sampling_error)
+        return LinearFunctionSampling.apply(x,self.weight,self.bias,self.sampling_error,self.sampling_mode,self.sampling_order)
 
 class LinearFunctionSampling(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, input, weight,bias=None,sampling_error=0.):
+    def forward(ctx, input, weight,bias,sampling_error,sampling_mode,sampling_order):
         # 保存反向传播所需的参数
-        ctx.save_for_backward(input, weight, bias,Tensor([sampling_error]))
+        ctx.save_for_backward(input, weight, bias,Tensor([sampling_error]),Tensor([sampling_mode]),Tensor([sampling_order]))
         # output = input.mm(weight.t())
         # if bias is not None:
         #     output += bias.unsqueeze(0).expand_as(output)
@@ -238,14 +258,15 @@ class LinearFunctionSampling(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         # 获取保存的参数
-        input, weight,bias,sampling_error = ctx.saved_tensors
+        input, weight,bias,sampling_error,sampling_mode,sampling_order = ctx.saved_tensors
         # 对梯度进行一些后处理
-        sampling_engine=SamplingBlock(sampling_error)
+        sampling_engine=SamplingBlock(sampling_error[0],sampling_mode[0],sampling_order[0])
         grad_input = torch.matmul(grad_output,weight)
         grad_weight = torch.matmul(torch.transpose(grad_output, grad_output.dim()-2,grad_output.dim()-1),input).sum(0) #reduce batch
         grad_bias = None
         if bias is not None:
-            grad_bias = sampling_engine(grad_output.sum([axis for axis in range(grad_output.dim()-1)])) #reduce batch
+            grad_bias = sampling_engine(grad_output) 
+            grad_bias=grad_output.sum([axis for axis in range(grad_output.dim()-1)]) #reduce batch
         # add sampling process
         grad_weight_samping=sampling_engine(grad_weight)
         if compute_success_prob_block:
@@ -272,7 +293,7 @@ class LinearFunctionSampling(torch.autograd.Function):
                 sqrt_p=(g3/f1/g2).numpy()
                 with open(filename, 'a') as f:
                     f.write(f'{y_dim} {sqrt_p}\n') 
-        return grad_input, grad_weight_samping, grad_bias,None
+        return grad_input, grad_weight_samping, grad_bias,None,None,None
 
 
 class MultiheadAttentionSampling(BaseModule):
@@ -316,6 +337,8 @@ class MultiheadAttentionSampling(BaseModule):
                  attn_drop=0.,
                  proj_drop=0.,
                  sampling_error=0.,
+                 sampling_mode=0,
+                 sampling_order=100,
                  dropout_layer=dict(type='Dropout', drop_prob=0.),
                  qkv_bias=True,
                  qk_scale=None,
@@ -339,9 +362,9 @@ class MultiheadAttentionSampling(BaseModule):
         else:
             self.scaled_dot_product_attention = scaled_dot_product_attention
 
-        self.qkv = LinearSampling(self.input_dims, embed_dims * 3, bias=qkv_bias,sampling_error=sampling_error)
+        self.qkv = LinearSampling(self.input_dims, embed_dims * 3, bias=qkv_bias,sampling_error=sampling_error,sampling_mode=sampling_mode,sampling_order=sampling_order)
         self.attn_drop = attn_drop
-        self.proj = LinearSampling(embed_dims, embed_dims, bias=proj_bias,sampling_error=sampling_error)
+        self.proj = LinearSampling(embed_dims, embed_dims, bias=proj_bias,sampling_error=sampling_error,sampling_mode=sampling_mode,sampling_order=sampling_order)
         self.proj_drop = nn.Dropout(proj_drop)
 
         self.out_drop = build_dropout(dropout_layer)
@@ -377,72 +400,48 @@ class MultiheadAttentionSampling(BaseModule):
 
 class PESampling(nn.Module):
 
-    def __init__(self,poistion_parameters,sampling_error):
+    def __init__(self,poistion_parameters,sampling_error,sampling_mode,sampling_order):
         super(PESampling, self).__init__()
         self.sampling_error=sampling_error
+        self.sammpling_mode=sampling_mode
+        self.sampling_order=sampling_order
         self.pos_parameters=poistion_parameters
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
 
-        return PESamplingAutoGrad.apply(x,self.pos_parameters,self.sampling_error)
+        return PESamplingAutoGrad.apply(x,self.pos_parameters,self.sampling_error,self.sammpling_mode,self.sampling_order)
 
 
 class PESamplingAutoGrad(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x,position_parameters,sampling_error):
-        ctx.save_for_backward(x, position_parameters, Tensor([sampling_error]))
+    def forward(ctx, x,position_parameters,sampling_error,sampling_mode,sampling_order):
+        ctx.save_for_backward(x, position_parameters, Tensor([sampling_error]),Tensor([sampling_mode]),Tensor([sampling_order]))
         return x+position_parameters
 
     @staticmethod
     def backward(ctx, grad_output):
         # 在backward方法中，获取保存的input
-        input,position_parameters, sampling_error= ctx.saved_tensors
-        if sampling_error != 0:
-            y=torch.squeeze(torch.flatten(grad_output,0,grad_output.dim()-1),0)
-            sampling_times=int(np.log2(y.shape[0])/sampling_error/sampling_error)
-            y_norm=y.norm(2)
-            if y_norm>1e-8 and y_norm<1e13:
+        input,position_parameters, sampling_error,sampling_mode,sampling_order= ctx.saved_tensors
+        sampling_engine=SamplingBlock(sampling_error[0],sampling_mode[0],sampling_order[0])
+        grad_output=sampling_engine(grad_output)
+        return grad_output,grad_output, None,None,None
 
-                y_abs=y/y_norm*y/y_norm 
-                m=torch.distributions.binomial.Binomial(sampling_times,y_abs).sample()
-                m=torch.sqrt(m)
-                m=torch.sign(y)*m 
-                m=m/m.norm(2)*y_norm 
-                m=torch.reshape(m,grad_output.shape)
-                return grad_output,m,None
-            else:
-                return grad_output-grad_output,grad_output-grad_output, None
-        else: 
-            return grad_output,grad_output, None
+        # if sampling_error != 0:
+        #     y=torch.squeeze(torch.flatten(grad_output,0,grad_output.dim()-1),0)
+        #     sampling_times=int(np.log2(y.shape[0])/sampling_error/sampling_error)
+        #     y_norm=y.norm(2)
+        #     if y_norm>1e-8 and y_norm<1e13:
 
-
-class ChebyshevReconstruction(nn.Module):
-    def __init__(self,order):
-        super(ChebyshevReconstruction, self).__init__()
-        self.order=order
-    # x:[batch_size,token_size,length]
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x0=
-        return x
+        #         y_abs=y/y_norm*y/y_norm 
+        #         m=torch.distributions.binomial.Binomial(sampling_times,y_abs).sample()
+        #         m=torch.sqrt(m)
+        #         m=torch.sign(y)*m 
+        #         m=m/m.norm(2)*y_norm 
+        #         m=torch.reshape(m,grad_output.shape)
+        #         return grad_output,m,None
+        #     else:
+        #         return grad_output-grad_output,grad_output-grad_output, None
+        # else: 
+        #     return grad_output,grad_output, None
 
 
-# def chebyshev_dec_test(y,decomposition_order):
-#     m = len(y)
-#     x = np.cos(np.pi * (np.arange(m) + 0.5) / m)
-#     # 计算切比雪夫系数
-#     coefficients = np.zeros(decomposition_order)
-#     for n in range(decomposition_order):
-#         Tn = np.cos(n * np.arccos(x))  # 切比雪夫多项式的值
-#         coefficients[n] = np.dot(y, Tn) * 2 / m
-#     coefficients[0] /= 2
-#     z=np.zeros(x.shape[0])
-#     for n,coef in enumerate(coefficients):
-#         z=z+coef*np.cos(n * np.arccos(x))
-
-#     plt.plot(x,y,label='func')
-#     plt.scatter(x,y)
-#     plt.plot(x,z,label="cheby")
-#     plt.scatter(x,z)
-#     plt.legend(loc=1)
-#     plt.show()
-#     return z

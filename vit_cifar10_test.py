@@ -54,7 +54,7 @@ def inference_test_2():
     print(mmpretrain.__version__)
     print(get_compiling_cuda_version())
     print(get_compiler_version())
-    batch_size_=4
+    batch_size_=16
 
     transform = transforms.Compose(
     [transforms.ToTensor(),
@@ -71,7 +71,7 @@ def inference_test_2():
     classes = ('plane', 'car', 'bird', 'cat',
            'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
     images, labels = next(dataiter)
-    print(' '.join(f'{classes[labels[j]]:5s}' for j in range(batch_size_)))
+    
 
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -90,14 +90,16 @@ def inference_test_2():
     std=[51.5865, 50.847, 51.255],
     # loaded images are already RGB format
     to_rgb=False)
-    model=get_model(config,pretrained=True)
+    model=get_model(config,pretrained=True,device=device)
     # print(model)
     # # image=torch.rand(1,3,64,64)
     # output=model.predict(images)
+    images = images.to('cuda:0')
     output=model(images)
     label=torch.max(output,1)[1]
     cls=[classes[label[i]] for i in range(label.shape[0])]
     # print(output)
+    print(' '.join(f'{classes[labels[j]]:5s}' for j in range(batch_size_)))
     print(cls)
 
 def train_test():

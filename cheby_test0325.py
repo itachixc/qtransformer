@@ -23,12 +23,12 @@ def chebyshev_dec_test(y,decomposition_order):
     for n,coef in enumerate(coefficients):
         z=z+coef*np.cos(n * np.arccos(x))
 
-    # plt.plot(x,y,label='func')
-    # plt.scatter(x,y)
-    # plt.plot(x,z,label="cheby")
-    # plt.scatter(x,z)
-    # plt.legend(loc=1)
-    # plt.show()
+    plt.plot(x,y,label='func')
+    plt.scatter(x,y)
+    plt.plot(x,z,label="cheby")
+    plt.scatter(x,z)
+    plt.legend(loc=1)
+    plt.show()
     return z
 
 import torch
@@ -47,38 +47,8 @@ def chebyshev_dec_test_torch(y, decomposition_order):
         z = z + coef * torch.cos(n * torch.acos(x))
     return z
 
-import torch
 
-def chebyshev_dec_test_torch_multidim(y, decomposition_order, dim=0):
-    # 确定操作维度的大小
-    m = y.shape[dim]
-    results = []
-    x = torch.cos(torch.pi * (torch.arange(m).float() + 0.5) / m)
-    # 沿指定维度遍历
-    for i in range(y.size(dim)):
-        # 选择当前元素
-        if dim == 0:
-            yi = y[i]
-        else:
-            yi = y[:, i] if dim == 1 else y.select(dim, i)
-        
-        # 计算切比雪夫系数
-        coefficients = torch.zeros((y.shape[0],decomposition_order))
-        for n in range(decomposition_order):
-            Tn = torch.cos(n * torch.acos(x))  # 切比雪夫多项式的值
-            coefficients[:,n] = torch.dot(y[:,i], Tn) * 2 / m
-        coefficients[0] /= 2
-        
-        # 计算结果
-        z = torch.zeros(x.shape[0])
-        for n, coef in enumerate(coefficients):
-            z = z + coef * torch.cos(n * torch.acos(x))
-        
-        # 收集结果
-        results.append(z.unsqueeze(dim))
-    
-    # 将结果组合回多维tensor
-    return torch.cat(results, dim=dim)
+
 
 
 
@@ -106,22 +76,47 @@ def load_data(file_name):
 def cosine_similarity(x,y):
     return np.dot(x,y)/np.linalg.norm(x)/np.linalg.norm(y)
 
+def chebyshev_dec_test_torch_multidim(y, decomposition_order):
+    
+    x = torch.cos(torch.pi * (torch.arange(y.shape[-1]).float() + 0.5) / y.shape[-1])
+    # chebyshev polynomial
+    cheby_poly=torch.cos(torch.outer(torch.arange(decomposition_order) , torch.acos(x)))
+    a=torch.matmul(cheby_poly,cheby_poly.T)
+    print(a)
+    # coefficients
+    coefficients=torch.matmul(y,cheby_poly.T)*2/y.shape[-1]
+    coefficients[...,0]=coefficients[...,0]/2
+    # restructed y
+    restructed_y=torch.matmul(coefficients,cheby_poly)
+   
+    return restructed_y
+
+
 if __name__=="__main__":
     # 示例向量
     # vector = np.array([np.cos(i*0.1) for i in range(100)])
     # vector = np.array([i for i in range(100)])/100
+    # a = torch.tensor([1, 2, 3])
+    # # 计算外积
+    # outer_product = torch.outer(a, b)
+    # print("外积:\n", outer_product)
+    # exit()
+    test()
+    exit()
 
     # 示例使用
     # 示例使用
-    m = 3 # 示例数据长度
+    m = 2 # 示例数据长度
+    p=4
     n = 10   # 第二维度的大小
-    y = torch.rand(m, n)  # 创建一个随机的多维torch.tensor
-    decomposition_order = 5  # 分解阶数
-    dim = 1  # 指定沿着第一个维度操作
+    y = torch.rand(m, p,n)  # 创建一个随机的多维torch.tensor
+    decomposition_order = 10  # 分解阶数
 
-    z = chebyshev_dec_test_torch_multidim(y, decomposition_order, dim)
-    print(y)
-    print(z)
+    z = chebyshev_dec_test_torch_multidim(y, decomposition_order)
+    # print(z.shape)
+    # print(y)
+    # print(z)
+    # print(torch.norm(y-z))
 
     exit()
 
