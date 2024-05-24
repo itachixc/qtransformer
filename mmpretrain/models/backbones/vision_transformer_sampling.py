@@ -22,6 +22,20 @@ from mmcv.cnn import (Linear,build_activation_layer, build_conv_layer)
 from mmcv.cnn.bricks.drop import build_dropout
 from mmcv.cnn.bricks.scale import LayerScale
 
+
+# is_compare_rf=False
+
+# dataset='cub'
+# dataset='oxford_iii_pets'
+
+repeat_id=1
+dataset='oxford_iii_pets'
+file_pre=f'test_qofd_0513/{dataset}/eps2e-3/{repeat_id}'
+is_save=False
+lay=0
+# order=20
+
+
 class TransformerEncoderLayer(BaseModule):
     """Implements one encoder layer in Vision Transformer.
 
@@ -70,7 +84,7 @@ class TransformerEncoderLayer(BaseModule):
         self.embed_dims = embed_dims
 
         self.ln1 = build_norm_layer(norm_cfg, self.embed_dims)
-
+        self.sampling_error=sampling_error
         self.sampling=SamplingBlock(sampling_error,sampling_mode,sampling_order)
 
         if sampling_error==0:
@@ -149,7 +163,32 @@ class TransformerEncoderLayer(BaseModule):
                 nn.init.normal_(m.bias, std=1e-6)
 
     def forward(self, x):
-        x = x + self.sampling(self.attn(self.ln1(x)))
+        # x = x + self.sampling(self.attn(self.ln1(x)))
+        # return x
+        x_atten=self.attn(self.ln1(x))
+        x_atten_tilde=self.sampling(x_atten)
+        # x_origin=x+x_atten
+        # x_defer=self.sampling(x_origin)
+        # x_mr=x+x_atten_tilde
+        x=x+x_atten_tilde
+        
+        # if is_compare_rf:
+        #     filename_block=f'{file_pre}/{dataset}/{dataset}_{self.sampling_error}_qofd.txt'
+        #     with open(filename_block, 'a') as f:
+        #         cos_sim_defer=torch.sum(x_origin*x_defer)/torch.norm(x_origin)/torch.norm(x_defer)
+        #         cos_sim_mr=torch.sum(x_origin*x_mr)/torch.norm(x_origin)/torch.norm(x_mr)
+        #         f.write(f'[{cos_sim_defer} {cos_sim_mr}]\n')
+        #         print(cos_sim_defer,cos_sim_mr)
+        global lay
+
+        if is_save:
+            if self.sampling_error==0:
+                filename_block=f'{file_pre}/standard/layer={lay}.pt'
+                torch.save(x,filename_block)
+            else: 
+                filename_block=f'{file_pre}/multiple_reuse/layer={lay}.pt'
+                torch.save(x,filename_block)
+            lay=(lay+1)%12
         x = self.ffn(self.ln2(x), identity=x)
         return x
 
@@ -214,10 +253,10 @@ class FFNSampling(BaseModule):
         for _ in range(num_fcs - 1):
             layers.append(
                 Sequential(
-                    LinearSampling(in_channels, feedforward_channels,sampling_error=sampling_error),
+                    LinearSampling(in_channels, feedforward_channels,sampling_error=sampling_error,sampling_mode=sampling_mode,sampling_order=sampling_order),
                     build_activation_layer(act_cfg), nn.Dropout(ffn_drop)))
             in_channels = feedforward_channels
-        layers.append(LinearSampling(feedforward_channels, embed_dims,sampling_error=sampling_error))
+        layers.append(LinearSampling(feedforward_channels, embed_dims,sampling_error=sampling_error,sampling_mode=sampling_mode,sampling_order=sampling_order))
         layers.append(nn.Dropout(ffn_drop))
         self.layers = Sequential(*layers)
         self.dropout_layer = build_dropout(

@@ -38,10 +38,16 @@ compute_success_prob=False
 compute_success_prob_block=False
 compute_success_a_qdac=False
 r_size=640
-dataset='cifar10'
-file_pre='test_cheby_0326'
+dataset='cifar100'
+dataset='cub'
+dataset='oxford_iii_pets'
 test_cheby=False
 label1=0
+
+is_compare=False
+# order=20
+file_pre='test_qofd_0513'
+
 
 def scaled_dot_product_attention_pyimpl(query,
                                         key,
@@ -135,21 +141,80 @@ class SamplingBlock(nn.Module):
         if self.sampling_mode==0:
             # print('mode 0')
             return SamplingBlockAutoGrad.apply(x,self.sampling_error)
+        elif self.sampling_mode==2:
+            # print('mode 0')
+            return SamplingBlockComAutoGrad.apply(x,self.sampling_order)
         else:
             # print('mode 1')
             x_max=torch.max(torch.abs(x))
-            x=x.transpose(-1,-2)/x_max
-            coor = torch.cos(torch.pi * (torch.arange(x.shape[-1]).float() + 0.5) / x.shape[-1])
-            # chebyshev polynomial
-            cheby_poly=torch.cos(torch.outer(torch.arange(self.sampling_order) , torch.acos(coor))).to(x.device)
-            # coefficients
-            coefficients=torch.matmul(x,cheby_poly.T)*2/x.shape[-1]
-            coefficients[...,0]=coefficients[...,0]/2
-            # restructed y
-            restructed_x=torch.matmul(coefficients,cheby_poly)
-            # print(torch.norm(restructed_x-x))
-            restructed_x=restructed_x.transpose(-1,-2)*x_max
-            return restructed_x
+            if x_max<1e-10:
+                return x
+            else:
+                # print(x.shape)
+                # print(self.sampling_order)
+                x=x.transpose(-1,-2)/x_max
+                coor = torch.cos(torch.pi * (torch.arange(x.shape[-1]).float() + 0.5) / x.shape[-1])
+                # chebyshev polynomial
+                cheby_poly=torch.cos(torch.outer(torch.arange(self.sampling_order) , torch.acos(coor))).to(x.device)
+                # coefficients
+                coefficients=torch.matmul(x,cheby_poly.T)*2/x.shape[-1]
+                coefficients[...,0]=coefficients[...,0]/2
+                # restructed y
+                restructed_x=torch.matmul(coefficients,cheby_poly)
+
+                # x=x.transpose(-1,-2)/x_max
+                # coor = torch.cos(torch.pi * (torch.arange(x.shape[-1]).float() + 0.5) / x.shape[-1])
+                # # chebyshev polynomial
+                # cheby_poly=torch.cos(torch.outer(torch.arange(x.shape[-1]) , torch.acos(coor))).to(x.device)
+                # # coefficients
+                # coefficients=torch.matmul(x,cheby_poly.T)*2/x.shape[-1]
+                # coefficients[...,0]=coefficients[...,0]/2
+
+                # # abs_coef=torch.abs(coefficients)
+                # _,indices=torch.topk(torch.abs(coefficients), self.sampling_order, dim=-1)
+                # sizes = list(x.shape[:-1])
+                # meshgrids = torch.meshgrid([torch.arange(size, device=x.device) for size in sizes], indexing='ij')
+                # expanded_grids = [grid.unsqueeze(-1).expand(*sizes, self.sampling_order) for grid in meshgrids]
+                # selected_values = coefficients[(*expanded_grids, indices)]
+                # select_cheby=cheby_poly[indices,:]
+
+                # batch_shape = selected_values.shape[:-1]
+                # j = selected_values.shape[-1]
+                # k = select_cheby.shape[-1]
+
+                # # 创建结果张量
+                # restructed_x = torch.zeros(*batch_shape, k, device=selected_values.device)
+
+                # # 逐步计算
+                # for n in range(j):
+                #     restructed_x += selected_values[..., n].unsqueeze(-1) * select_cheby[..., n, :]
+
+
+                # restruct_x=torch.matmul(selected_values,select_cheby)
+                # restructed_x=torch.einsum('...j,...jk->...k', selected_values, select_cheby)
+
+                # x0=x[0,100,:].cpu().detach().numpy()
+                # y0=restructed_x[0,100,:].cpu().detach().numpy()
+                # c=np.dot(x0,y0)/np.linalg.norm(x0)/np.linalg.norm(y0)
+                # plt.scatter(range(len(x0)), x0,label='origin')
+                # plt.plot(y0,label='reconstruct')
+                # plt.title(f'(origin,reconstruct)={c}')
+                # plt.legend(loc=1)
+                # plt.show()
+                # plt.savefig('test0513.png')
+                # restructed y
+                # restructed_x=torch.matmul(coefficients,cheby_poly)
+
+                if is_compare and restructed_x.shape[-1]>500:
+                    filename_block=f'{file_pre}/{dataset}/{dataset}_{self.sampling_order}_qofd.txt'
+                    with open(filename_block, 'a') as f:
+                        cos_sim=torch.sum(x*restructed_x)/torch.norm(x)/torch.norm(restructed_x)
+                        f.write(f'{cos_sim}\n')
+                        print(cos_sim)
+                # print(torch.norm(restructed_x-x))
+                restructed_x=restructed_x.transpose(-1,-2)*x_max
+
+                return restructed_x
 
         
 
@@ -160,15 +225,6 @@ class SamplingBlockAutoGrad(torch.autograd.Function):
         ctx.save_for_backward(x,Tensor([sampling_error]))
         if sampling_error != 0:
             y=torch.squeeze(torch.flatten(x,0,x.dim()-1),0)
-            if compute_success_prob:
-                y_max=torch.norm(y,float('inf')).cpu()
-                y_f=torch.norm(y).cpu()
-                y_size=y.size()[0]
-                if y_max>1e-6:
-                    sqrt_p=(y_f/y_max/np.sqrt(y_size)).numpy()
-                    filename=f'{file_pre}/{dataset}/{dataset}_{r_size}_qdac_forward.txt'
-                    with open(filename, 'a') as f:
-                        f.write(f'{y_size} {sqrt_p}\n')
             sampling_times=int(36*np.log2(y.shape[0])/sampling_error/sampling_error)
             y_norm=y.norm(2)
             if y_norm>1e-8 and y_norm<1e13:
@@ -212,6 +268,111 @@ class SamplingBlockAutoGrad(torch.autograd.Function):
                 m=m/m.norm(2)*y_norm 
                 m=torch.reshape(m,x.shape)
                 return m,None
+            else:
+                return x-x, None
+        else: 
+            return x, None
+        
+class SamplingBlockComAutoGrad(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x,sampling_order):
+        # 在forward方法中，保存input，供backward使用
+        ctx.save_for_backward(x,Tensor([sampling_order]))
+        if sampling_order != 0:
+            x_max=torch.max(torch.abs(x))
+            y=x.transpose(-1,-2)/x_max
+            yn=y/torch.unsqueeze(torch.norm(y,dim=-1),dim=-1)
+            yn=torch.where(torch.isnan(yn),torch.full_like(yn,0),yn)
+            yn=torch.where(torch.isinf(yn),torch.full_like(yn,0),yn)
+            
+            y_norm=y.norm(2)
+            # y=torch.squeeze(torch.flatten(x,0,x.dim()-1),0)
+            sampling_times=int(sampling_order*100)
+            if y_norm>1e-8 and y_norm<1e13:
+                # y_abs=y/y_norm*y/y_norm 
+                # yn2=torch.abs(yn) ** 2
+                yn_2=yn*yn
+                yn_2=torch.where(yn_2>1,torch.full_like(yn_2,1),yn_2)
+                # m=torch.distributions.multinomial.Multinomial(sampling_times,torch.abs(yn) ** 2).sample()/sampling_times
+                m=torch.distributions.binomial.Binomial(sampling_times,yn_2).sample()
+                m=m/torch.unsqueeze(torch.sum(m,dim=-1),dim=-1)
+
+                new_states = torch.cat(((yn+torch.sqrt(m))/torch.sqrt(torch.tensor(2.0)),(yn-torch.sqrt(m))/torch.sqrt(torch.tensor(2.0))),dim=-1)
+                new_states=(new_states/torch.unsqueeze(torch.norm(new_states,dim=-1),dim=-1))**2
+                # outcomes=torch.distributions.multinomial.Multinomial(sampling_times,new_states).sample()
+
+                new_states=torch.where(torch.isnan(new_states) ,torch.full_like(new_states,0),new_states)
+                new_states=torch.where(torch.isinf(new_states),torch.full_like(new_states,0),new_states)
+                # new_states=torch.where(torch.isinf(yn),torch.full_like(yn,0),yn)
+                outcomes=torch.distributions.binomial.Binomial(sampling_times,new_states).sample()
+                outcomes=outcomes/torch.unsqueeze(torch.sum(outcomes,dim=-1),dim=-1)
+                n_0_i = outcomes[...,:y.shape[-1]]
+                sigma_i = torch.where(n_0_i/m > 0.4 , torch.tensor(1.0), torch.tensor(-1.0))
+                m = sigma_i * torch.sqrt(m)
+
+                # m=m/m.norm(2)*y_norm 
+                m1=torch.norm(y,dim=-1)/torch.norm(m,dim=-1)
+                m1=m1.unsqueeze(dim=-1)
+                m=m*m1*x_max
+                m=m.transpose(-1,-2)
+                m=torch.where(torch.isnan(m),torch.full_like(m,0),m)
+                m=torch.where(torch.isinf(m),torch.full_like(m,0),m)
+                if is_compare and m.shape[-1]>500:
+                    filename_block=f'{file_pre}/{dataset}/{dataset}_{sampling_order}_inf.txt'
+                    with open(filename_block, 'a') as f:
+                        cos_sim=torch.sum(x*m)/torch.norm(x)/torch.norm(m)
+                        f.write(f'{cos_sim}\n')
+                        print(cos_sim)
+                # print('forward:',torch.norm(m-x),torch.max(torch.abs(m-x)))
+                return m
+            elif y_norm>1e13:
+                return x
+            else:
+                return x-x 
+        else:
+            return x
+
+    @staticmethod
+    def backward(ctx, x):
+        # 在backward方法中，获取保存的input
+        input, sampling_order= ctx.saved_tensors
+        if sampling_order != 0:
+            x_max=torch.max(torch.abs(x))
+            y=x.transpose(-1,-2)/x_max
+            yn=y/torch.unsqueeze(torch.norm(y,dim=-1),dim=-1)
+            yn=torch.where(torch.isnan(yn),torch.full_like(yn,0),yn)
+            # yn=torch.where(torch.isinf(yn),torch.full_like(yn,0),yn)
+            y_norm=y.norm(2)
+            # y=torch.squeeze(torch.flatten(x,0,x.dim()-1),0)
+            sampling_times=int(sampling_order*1000)
+            if y_norm>1e-8 and y_norm<1e13:
+                # y_abs=y/y_norm*y/y_norm 
+
+                # m=torch.distributions.multinomial.Multinomial(sampling_times,torch.abs(yn) ** 2).sample()/sampling_times
+                m=torch.distributions.binomial.Binomial(sampling_times,torch.abs(yn) ** 2).sample()
+                m=m/torch.unsqueeze(torch.sum(m,dim=-1),dim=-1)
+
+                new_states = torch.cat(((yn+torch.sqrt(m))/torch.sqrt(torch.tensor(2.0)),(yn-torch.sqrt(m))/torch.sqrt(torch.tensor(2.0))),dim=-1)
+                new_states=(new_states/torch.unsqueeze(torch.norm(new_states,dim=-1),dim=-1))**2
+                # outcomes=torch.distributions.multinomial.Multinomial(sampling_times,new_states).sample()
+
+                new_states=torch.where(torch.isnan(new_states) ,torch.full_like(new_states,0),new_states)
+                new_states=torch.where(torch.isinf(new_states),torch.full_like(new_states,0),new_states)
+                outcomes=torch.distributions.binomial.Binomial(sampling_times,new_states).sample()
+                outcomes=outcomes/torch.unsqueeze(torch.sum(outcomes,dim=-1),dim=-1)
+                n_0_i = outcomes[...,:y.shape[-1]]
+                sigma_i = torch.where(n_0_i/m > 0.4 , torch.tensor(1.0), torch.tensor(-1.0))
+                m = sigma_i * torch.sqrt(m)
+
+                # m=m/m.norm(2)*y_norm 
+                m1=torch.norm(y,dim=-1)/torch.norm(m,dim=-1)
+                m1=m1.unsqueeze(dim=-1)
+                m=m*m1*x_max
+                m=m.transpose(-1,-2)
+                m=torch.where(torch.isnan(m),torch.full_like(m,0),m)
+                m=torch.where(torch.isinf(m),torch.full_like(m,0),m)
+                # print('back:',torch.norm(m-x),torch.max(torch.abs(m-x)))
+                return m,None 
             else:
                 return x-x, None
         else: 
@@ -265,9 +426,11 @@ class LinearFunctionSampling(torch.autograd.Function):
         grad_weight = torch.matmul(torch.transpose(grad_output, grad_output.dim()-2,grad_output.dim()-1),input).sum(0) #reduce batch
         grad_bias = None
         if bias is not None:
+            sampling_engine.sampling_order=grad_output.shape[-2]
             grad_bias = sampling_engine(grad_output) 
             grad_bias=grad_output.sum([axis for axis in range(grad_output.dim()-1)]) #reduce batch
         # add sampling process
+        sampling_engine.sampling_order=grad_weight.shape[-2]
         grad_weight_samping=sampling_engine(grad_weight)
         if compute_success_prob_block:
             f1=torch.norm(grad_output).cpu()

@@ -148,3 +148,8 @@ checkpoint
 model_params.txt
 *.ckpt*
 results.txt
+
+# data 
+test_qofd_0513/
+test_cheby_0326/
+work_dirs/

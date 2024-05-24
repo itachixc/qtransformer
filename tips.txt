@@ -1,0 +1,16 @@
+python tools/train.py gpu_vit_config_cifar10_bs64_p16_384_mode1_order_500.py
+set CUDA_VISIBLE_DEVICES=1
+
+python tools/train.py gpu_vit_config_cub_bs64_p16_384_mode1_order_200.py & python tools/train.py gpu_vit_config_cub_bs64_p16_384_mode1_order_200_defer.py & python tools/train.py gpu_vit_config_cub_bs64_p16_384_mode1_order_100.py & python tools/train.py gpu_vit_config_cub_bs64_p16_384_mode1_order_100_defer.py
+
+
+python tools/train.py gpu_vit_config_cub_bs64_p16_384_mode1_order_50.py & python tools/train.py gpu_vit_config_cub_bs64_p16_384_mode1_order_50_defer.py & python tools/train.py gpu_vit_config_cub_bs64_p16_384_mode1_order_40.py & python tools/train.py gpu_vit_config_cub_bs64_p16_384_mode1_order_40_defer.py
+
+
+
+python tools/train.py gpu_vit_config_oxford_iii_pets_bs64_p16_384_mode1_order_200.py & python tools/train.py gpu_vit_config_oxford_iii_pets_bs64_p16_384_mode1_order_200_defer.py & python tools/train.py gpu_vit_config_oxford_iii_pets_bs64_p16_384_mode1_order_100.py & python tools/train.py gpu_vit_config_oxford_iii_pets_bs64_p16_384_mode1_order_100_defer.py
+
+python tools/train.py gpu_vit_config_oxford_iii_pets_bs64_p16_384_mode1_order_50.py & python tools/train.py gpu_vit_config_oxford_iii_pets_bs64_p16_384_mode1_order_50_defer.py & python tools/train.py gpu_vit_config_oxford_iii_pets_bs64_p16_384_mode1_order_40.py & python tools/train.py gpu_vit_config_oxford_iii_pets_bs64_p16_384_mode1_order_40_defer.py
+
+
+python tools/train.py gpu_vit_config_cifar10_bs64_p16_384_mode2_order_200_defer.py & python tools/train.py gpu_vit_config_cifar10_bs64_p16_384_mode2_order_200.py

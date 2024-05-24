@@ -99,7 +99,7 @@ class VisionTransformerClsHeadSampling(ClsHead):
         pre_logits = self.pre_logits(feats)
      
         y=self.layers.head(pre_logits)
-        
+        self.sampling.sampling_order=y.shape[-2]
         cls_score = self.sampling(y)
 
         return cls_score

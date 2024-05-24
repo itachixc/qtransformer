@@ -4,6 +4,7 @@ _base_ = [
 
 sampling_error=0.
 r_size=384
+# r_size=1024
 # dataset settings
 dataset_type = 'CIFAR10'
 

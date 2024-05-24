@@ -1,5 +1,5 @@
 _base_ = [
-    'configs/_base_/default_runtime.py'
+    '../configs/_base_/default_runtime.py'
 ]
 
 sampling_error=0.

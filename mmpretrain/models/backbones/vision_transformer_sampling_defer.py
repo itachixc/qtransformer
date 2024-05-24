@@ -13,7 +13,7 @@ from ..utils import (MultiheadAttention, SwiGLUFFNFused, build_norm_layer,
                      resize_pos_embed, to_2tuple)
 from .base_backbone import BaseBackbone
 
-from ..utils import SamplingBlock,LinearSampling, MultiheadAttentionSampling
+from ..utils import SamplingBlock,LinearSampling, MultiheadAttentionSampling,PESampling
 from mmengine.utils import deprecated_api_warning, to_2tuple
 from mmengine.model import BaseModule, ModuleList, Sequential
 # from mmcv.cnn import (Linear, build_activation_layer, build_conv_layer)
@@ -21,6 +21,12 @@ from mmcv.cnn import (Linear,build_activation_layer, build_conv_layer)
 
 from mmcv.cnn.bricks.drop import build_dropout
 from mmcv.cnn.bricks.scale import LayerScale
+
+repeat_id=1
+dataset='oxford_iii_pets'
+file_pre=f'test_qofd_0513/{dataset}/eps2e-3/{repeat_id}'
+is_save=False
+lay=0
 
 class TransformerEncoderLayer(BaseModule):
     """Implements one encoder layer in Vision Transformer.
@@ -57,6 +63,8 @@ class TransformerEncoderLayer(BaseModule):
                  attn_drop_rate=0.,
                  drop_path_rate=0.,
                  sampling_error=0.,
+                 sampling_mode=0,
+                 sampling_order=100,
                  num_fcs=2,
                  qkv_bias=True,
                  ffn_type='origin',
@@ -69,7 +77,8 @@ class TransformerEncoderLayer(BaseModule):
 
         self.ln1 = build_norm_layer(norm_cfg, self.embed_dims)
 
-        self.sampling=SamplingBlock(sampling_error)
+        self.sampling=SamplingBlock(sampling_error,sampling_mode,sampling_order)
+        self.sampling_error=sampling_error
 
         if sampling_error==0:
             self.attn = MultiheadAttention(
@@ -87,6 +96,8 @@ class TransformerEncoderLayer(BaseModule):
                 attn_drop=attn_drop_rate,
                 proj_drop=drop_rate,
                 sampling_error=sampling_error,
+                sampling_mode=sampling_mode,
+                sampling_order=sampling_order,
                 dropout_layer=dict(type='DropPath', drop_prob=drop_path_rate),
                 qkv_bias=qkv_bias,
                 layer_scale_init_value=layer_scale_init_value)
@@ -138,6 +149,11 @@ class TransformerEncoderLayer(BaseModule):
 
     def forward(self, x):
         x = self.sampling(x + self.attn(self.ln1(x)))
+        global lay
+        if is_save:
+            filename_block=f'{file_pre}/single_reuse/layer={lay}.pt'
+            torch.save(x,filename_block)
+            lay=(lay+1)%12
         x = self.ffn(self.ln2(x), identity=x)
         return x
 
@@ -183,6 +199,8 @@ class FFNSamplingDefer(BaseModule):
                  act_cfg=dict(type='ReLU', inplace=True),
                  ffn_drop=0.,
                  sampling_error=0.,
+                 sampling_mode=0,
+                 sampling_order=100,
                  dropout_layer=None,
                  add_identity=True,
                  init_cfg=None,
@@ -193,17 +211,17 @@ class FFNSamplingDefer(BaseModule):
         self.embed_dims = embed_dims
         self.feedforward_channels = feedforward_channels
         self.num_fcs = num_fcs
-        self.sampling=SamplingBlock(sampling_error)
+        self.sampling=SamplingBlock(sampling_error,sampling_mode,sampling_order)
 
         layers = []
         in_channels = embed_dims
         for _ in range(num_fcs - 1):
             layers.append(
                 Sequential(
-                    LinearSampling(in_channels, feedforward_channels,sampling_error=sampling_error),
+                    LinearSampling(in_channels, feedforward_channels,sampling_error=sampling_error,sampling_mode=sampling_mode,sampling_order=sampling_order),
                     build_activation_layer(act_cfg), nn.Dropout(ffn_drop)))
             in_channels = feedforward_channels
-        layers.append(LinearSampling(feedforward_channels, embed_dims,sampling_error=sampling_error))
+        layers.append(LinearSampling(feedforward_channels, embed_dims,sampling_error=sampling_error,sampling_mode=sampling_mode,sampling_order=sampling_order))
         layers.append(nn.Dropout(ffn_drop))
         self.layers = Sequential(*layers)
         self.dropout_layer = build_dropout(
@@ -414,6 +432,8 @@ class VisionTransformerSamplingDefer(BaseBackbone):
                  drop_rate=0.,
                  drop_path_rate=0.,
                  sampling_error=0.,
+                 sampling_mode=0,
+                 sampling_order=100,
                  qkv_bias=True,
                  norm_cfg=dict(type='LN', eps=1e-6),
                  final_norm=True,
@@ -445,6 +465,10 @@ class VisionTransformerSamplingDefer(BaseBackbone):
         self.embed_dims = self.arch_settings['embed_dims']
         self.num_layers = self.arch_settings['num_layers']
         self.img_size = to_2tuple(img_size)
+
+        self.sampling_error=sampling_error
+        self.sampling_mode=sampling_mode
+        self.sampling_order=sampling_order
 
         # Set patch embedding
         _patch_cfg = dict(
@@ -515,6 +539,8 @@ class VisionTransformerSamplingDefer(BaseBackbone):
                 drop_rate=drop_rate,
                 drop_path_rate=dpr[i],
                 sampling_error=sampling_error,
+                sampling_mode=sampling_mode,
+                sampling_order=sampling_order,
                 qkv_bias=qkv_bias,
                 norm_cfg=norm_cfg)
             _layer_cfg.update(layer_cfgs[i])
@@ -629,13 +655,18 @@ class VisionTransformerSamplingDefer(BaseBackbone):
             # stole cls_tokens impl from Phil Wang, thanks
             cls_token = self.cls_token.expand(B, -1, -1)
             x = torch.cat((cls_token, x), dim=1)
-
-        x = x + resize_pos_embed(
+        x=PESampling(resize_pos_embed(
             self.pos_embed,
             self.patch_resolution,
             patch_resolution,
             mode=self.interpolate_mode,
-            num_extra_tokens=self.num_extra_tokens)
+            num_extra_tokens=self.num_extra_tokens),self.sampling_error,self.sampling_mode,self.sampling_order)(x)
+        # x = x + resize_pos_embed(
+        #     self.pos_embed,
+        #     self.patch_resolution,
+        #     patch_resolution,
+        #     mode=self.interpolate_mode,
+        #     num_extra_tokens=self.num_extra_tokens)
         x = self.drop_after_pos(x)
 
         x = self.pre_norm(x)

@@ -142,35 +142,29 @@ def approximate_function(coefficients, x):
 if __name__=="__main__":
     # npz_to_pth()
     # exit()
-    # sampling_times=10**2
-    dim=100
-    a=torch.rand(dim)*2-1
-    a=a/torch.norm(a)
-    b=torch.rand(dim)*2-1
-    b=b/torch.norm(b)
+    sampling_times=10**2
+    dim=10
+    a=torch.rand(3,dim)
+    print(a)
+    a_norm=torch.norm(a,dim=1)
+    print('norm:',a_norm)
+    # a=a/torch.norm(a)
+    # b=torch.rand(dim)*2-1
+    # b=b/torch.norm(b)
+    a1=torch.distributions.multinomial.Multinomial(sampling_times,a).sample()
+    print('a1:',a1)
+    a1_norm=torch.norm(a1,dim=1)
+    x=a_norm/a1_norm
+    print(x)
+    # x=torch.stack([x,x],1)
+    x=x.unsqueeze(dim=-1)
+    print(x)
 
-    coef=compute_coefficients(func, 10, num_points=10000)
+    a1=a1*x
+    print(a1)
 
-
-
-
-
-    sampling_times_range=[2**i for i in range(6,20)]
-    y1=[]
-    y2=[]
-    for sampling_times in sampling_times_range:
-        temp1,temp2=sampling_compare(a,b,sampling_times)
-        y1.append(temp1)
-        y2.append(temp2)
-    
-    plt.plot(sampling_times_range,y1,label='defer')
-    plt.plot(sampling_times_range,y2,label='q resudual')
-    plt.xscale('log')
-    plt.legend(loc=4)
-    plt.show()
-    # # print(a)
-    # a1=torch.distributions.multinomial.Multinomial(sampling_times,a).sample()/sampling_times
-    # a1=a1/torch.norm(a1)
+    xx=a-a1 
+    print(torch.norm(xx))
     
     # c=a+b
     # c=c/torch.norm(c)
@@ -178,6 +172,28 @@ if __name__=="__main__":
     # c1=c1/torch.norm(c1)
     # c2=a1+b 
     # c2=c2/torch.norm(c2)
+
+    # coef=compute_coefficients(func, 10, num_points=10000)
+
+
+
+
+
+    # sampling_times_range=[2**i for i in range(6,20)]
+    # y1=[]
+    # y2=[]
+    # for sampling_times in sampling_times_range:
+    #     temp1,temp2=sampling_compare(a,b,sampling_times)
+    #     y1.append(temp1)
+    #     y2.append(temp2)
+    
+    # plt.plot(sampling_times_range,y1,label='defer')
+    # plt.plot(sampling_times_range,y2,label='q resudual')
+    # plt.xscale('log')
+    # plt.legend(loc=4)
+    # plt.show()
+    # # print(a)
+    
 
     # x1=cosine_similarity(c,c1)
     # x2=cosine_similarity(c,c2)

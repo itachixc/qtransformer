@@ -115,10 +115,26 @@ if __name__=="__main__":
     # # g=torch.sum(c,dim=-1)
     # f=c.repeat(3,2,1)
     # print(f)
+    import matplotlib.pyplot as plt
 
-    a=torch.rand(2,3,4)
-    b=torch.unsqueeze(a,dim=1)
-    print(a.size(),b.size())
+    a=torch.rand(100)*0.2
+    a=a/torch.norm(a)
+    b=torch.ones(100)*0.1+a
+    b=b/torch.norm(b)
+    # b=torch.rand(3,4)
+    plt.scatter(range(100),a)
+    plt.plot(range(100),b)
+    plt.show()
+    
+    c=torch.sum(a*b)/torch.norm(a)/torch.norm(b)
+    print(c)
+    # b=torch.where(a>1,torch.full_like(a,1),a)
+    # b=torch.argmax(a,0)
+    # print(b)
+    # b=torch.unsqueeze(a,dim=1)
+    # print(a.size(),b.size())
+
+
 
 
     # linear_sampling_test()
